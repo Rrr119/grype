@@ -28,6 +28,7 @@ type Grype struct {
 	Exclusions                 []string           `yaml:"exclude" json:"exclude" mapstructure:"exclude"`
 	ExternalSources            externalSources    `yaml:"external-sources" json:"externalSources" mapstructure:"external-sources"`
 	Match                      matchConfig        `yaml:"match" json:"match" mapstructure:"match"`
+	Policy                     policyConfig       `yaml:"policy" json:"policy" mapstructure:"policy"`
 	FailOn                     string             `yaml:"fail-on-severity" json:"fail-on-severity" mapstructure:"fail-on-severity"`
 	Registry                   registry           `yaml:"registry" json:"registry" mapstructure:"registry"`
 	ShowSuppressed             bool               `yaml:"show-suppressed" json:"show-suppressed" mapstructure:"show-suppressed"`
@@ -68,6 +69,7 @@ func DefaultGrype(id clio.Identification) *Grype {
 			DB: DefaultDatabase(id),
 		},
 		Match:                      defaultMatchConfig(),
+		Policy:                     defaultPolicyConfig(),
 		ExternalSources:            defaultExternalSources(),
 		CheckForAppUpdate:          true,
 		VexAdd:                     []string{},
@@ -135,6 +137,26 @@ func (o *Grype) AddFlags(flags clio.FlagSet) {
 		fmt.Sprintf("ignore matches for vulnerabilities with specified comma separated fix states, options=%v", vulnerability.AllFixStates()),
 	)
 
+	flags.Float64VarP(&o.Policy.MinCVSS,
+		"min-cvss", "",
+		"minimum CVSS base score (0-10) a match must have to be reported; lower-scoring matches are suppressed as ignored matches",
+	)
+
+	flags.Float64VarP(&o.Policy.MinEPSS,
+		"min-epss", "",
+		"minimum EPSS exploitation probability (0-1) a match must have to be reported; lower-scoring matches are suppressed as ignored matches",
+	)
+
+	flags.BoolVarP(&o.Policy.ExcludeMissingCVSS,
+		"exclude-missing-cvss", "",
+		"when --min-cvss is set, also suppress matches that have no CVSS base score",
+	)
+
+	flags.BoolVarP(&o.Policy.ExcludeMissingEPSS,
+		"exclude-missing-epss", "",
+		"when --min-epss is set, also suppress matches that have no EPSS data",
+	)
+
 	flags.BoolVarP(&o.ByCVE,
 		"by-cve", "",
 		"orient results by CVE instead of the original vulnerability ID when possible",
@@ -174,6 +196,9 @@ func (o *Grype) PostLoad() error {
 		if failOnSeverity == vulnerability.UnknownSeverity {
 			return fmt.Errorf("bad --fail-on severity value '%s'", o.FailOn)
 		}
+	}
+	if err := o.Policy.PostLoad(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -221,6 +246,10 @@ VEX fields apply when Grype reads VEX data:
 	descriptions.Add(&o.VexAdd, `VEX statuses to consider as ignored rules`)
 	descriptions.Add(&o.MatchUpstreamKernelHeaders, `match kernel-header packages with upstream kernel as kernel vulnerabilities`)
 	descriptions.Add(&o.IncludeMatcherSuppressions, `include matches suppressed internally by matchers (e.g. distro fixed/NAK records, the built-in false-positive list) in the ignored matches output`)
+	descriptions.Add(&o.Policy.MinCVSS, `minimum CVSS base score (0-10) a match must have to be reported; matches below the threshold are recorded in ignoredMatches`)
+	descriptions.Add(&o.Policy.MinEPSS, `minimum EPSS exploitation probability (0-1) a match must have to be reported; matches below the threshold are recorded in ignoredMatches`)
+	descriptions.Add(&o.Policy.ExcludeMissingCVSS, `when policy.min-cvss is set, also suppress matches that have no CVSS base score (default: keep them)`)
+	descriptions.Add(&o.Policy.ExcludeMissingEPSS, `when policy.min-epss is set, also suppress matches that have no EPSS data (default: keep them)`)
 }
 
 func (o Grype) FailOnSeverity() *vulnerability.Severity {

@@ -40,6 +40,13 @@ type IgnoreRule struct {
 	VexStatus        string            `yaml:"vex-status" json:"vex-status" mapstructure:"vex-status"`
 	VexJustification string            `yaml:"vex-justification" json:"vex-justification" mapstructure:"vex-justification"`
 	MatchType        Type              `yaml:"match-type" json:"match-type" mapstructure:"match-type"`
+	// MaxCVSS ignores matches whose highest CVSS base score is below this value
+	// (0-10). Matches without any CVSS base score are treated as score 0, so a
+	// positive threshold also ignores matches with no CVSS data.
+	MaxCVSS *float64 `yaml:"max-cvss,omitempty" json:"max-cvss,omitempty" mapstructure:"max-cvss"`
+	// MaxEPSS ignores matches whose highest EPSS probability is below this
+	// value (0-1). Matches without EPSS data are treated as score 0.
+	MaxEPSS *float64 `yaml:"max-epss,omitempty" json:"max-epss,omitempty" mapstructure:"max-epss"`
 }
 
 // IgnoreRulePackage describes the Package-specific fields that comprise the IgnoreRule.
@@ -244,7 +251,33 @@ func getIgnoreConditionsForRule(rule IgnoreRule) []ignoreCondition {
 	if matchType := rule.MatchType; matchType != "" {
 		ignoreConditions = append(ignoreConditions, ifMatchTypeApplies(matchType))
 	}
+
+	if maxCVSS := rule.MaxCVSS; maxCVSS != nil {
+		ignoreConditions = append(ignoreConditions, ifMaxCVSSApplies(*maxCVSS))
+	}
+
+	if maxEPSS := rule.MaxEPSS; maxEPSS != nil {
+		ignoreConditions = append(ignoreConditions, ifMaxEPSSApplies(*maxEPSS))
+	}
 	return ignoreConditions
+}
+
+// ifMaxCVSSApplies matches vulnerabilities whose highest CVSS base score is
+// strictly below the threshold. Missing scores count as 0.
+func ifMaxCVSSApplies(maxCVSS float64) ignoreCondition {
+	return func(match Match) bool {
+		score, _ := HighestCVSSBaseScore(match)
+		return score < maxCVSS
+	}
+}
+
+// ifMaxEPSSApplies matches vulnerabilities whose highest EPSS probability is
+// strictly below the threshold. Missing scores count as 0.
+func ifMaxEPSSApplies(maxEPSS float64) ignoreCondition {
+	return func(match Match) bool {
+		score, _ := HighestEPSS(match)
+		return score < maxEPSS
+	}
 }
 
 func ifFixStateApplies(fs string) ignoreCondition {

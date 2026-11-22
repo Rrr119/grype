@@ -1,0 +1,18 @@
+{
+  "uid": "32266",
+  "harness": "Codex CLI",
+  "snapshotUrl": "https://github.com/Rrr119/grype/commit/6153516a84efa22c0baa61e0656b8473f56065f8",
+  "harnessVersion": "codex-cli 0.167.2",
+  "operatingSystem": "Ubuntu 26.04.1 LTS",
+  "operatingSystemCell": [
+    "MacOS/Linux"
+  ],
+  "outputDirectory": "/home/dev/feedback/uid32266",
+  "wslDistro": "Ubuntu-26.04",
+  "B": {
+    "success": false,
+    "canceled": true,
+    "error": "任务已取消",
+    "side": "B"
+  }
+}

@@ -16,6 +16,8 @@ type IgnoreRule struct {
 	VexStatus        string             `json:"vex-status,omitempty"`
 	VexJustification string             `json:"vex-justification,omitempty"`
 	MatchType        string             `json:"match-type,omitempty"`
+	MaxCVSS          *float64           `json:"max-cvss,omitempty"`
+	MaxEPSS          *float64           `json:"max-epss,omitempty"`
 }
 
 type IgnoreRulePackage struct {
@@ -51,6 +53,8 @@ func newIgnoreRule(r match.IgnoreRule) IgnoreRule {
 		VexStatus:        r.VexStatus,
 		VexJustification: r.VexJustification,
 		MatchType:        string(r.MatchType),
+		MaxCVSS:          r.MaxCVSS,
+		MaxEPSS:          r.MaxEPSS,
 	}
 }
 

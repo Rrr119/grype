@@ -224,9 +224,15 @@ func runGrype(ctx context.Context, app clio.Application, opts *options.Grype, us
 		return fmt.Errorf("failed to create VEX processor: %w", err)
 	}
 
+	policyFilter, err := opts.Policy.NewPolicyFilter()
+	if err != nil {
+		return fmt.Errorf("invalid risk policy: %w", err)
+	}
+
 	vulnMatcher := grype.VulnerabilityMatcher{
 		VulnerabilityProvider: vp,
 		IgnoreRules:           opts.Ignore,
+		Policy:                policyFilter,
 		NormalizeByCVE:        opts.ByCVE,
 		FailSeverity:          opts.FailOnSeverity(),
 		Matchers:              getMatchers(opts),

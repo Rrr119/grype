@@ -76,6 +76,29 @@ grype sbom:./sbom.json
 cat ./sbom.json | grype
 ```
 
+### Policy-based filtering (CVSS & EPSS)
+
+Grype can suppress findings that do not meet a risk policy based on CVSS base
+score and EPSS exploitation probability. Suppressed findings are not lost: they
+are moved to `ignoredMatches` (with the reason recorded) and remain visible in
+JSON output.
+
+```bash
+# keep only findings with a CVSS base score >= 7
+grype sbom:./sbom.json --min-cvss 7 -o json
+
+# keep only findings whose EPSS probability is >= 0.1
+grype sbom:./sbom.json --min-epss 0.1 -o json
+
+# combine both, and also suppress findings that lack score data
+grype sbom:./sbom.json --min-cvss 7 --min-epss 0.1 \
+  --exclude-missing-cvss --exclude-missing-epss -o json
+```
+
+The same policy is available through configuration (`policy:` block) and, for
+fine-grained per-rule control, via `max-cvss` / `max-epss` fields on ignore
+rules. See [docs/policy-filtering.md](docs/policy-filtering.md) for details.
+
 > [!TIP]
 > Check out the [Getting Started guide](https://oss.anchore.com/docs/guides/vulnerability/getting-started/) to explore all of the capabilities and features.
 >

@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid32266",
+  "B": "/home/dev/feedback/uid32266",
+  "sha": "6153516a84efa22c0baa61e0656b8473f56065f8",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "anchore",
+    "repo": "grype",
+    "sha": "6153516a84efa22c0baa61e0656b8473f56065f8"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "grype",
+    "cloneUrl": "https://github.com/Rrr119/grype.git"
+  },
+  "at": "2026-11-22T05:33:50.153Z"
+}
