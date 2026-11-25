@@ -40,8 +40,10 @@ func (o *SortBy) AddFlags(flags clio.FlagSet) {
 }
 
 func (o *SortBy) PostLoad() error {
-	if !strset.New(o.AllowableOptions...).Has(strings.ToLower(o.Criteria)) {
+	normalized := strings.ToLower(o.Criteria)
+	if !strset.New(o.AllowableOptions...).Has(normalized) {
 		return fmt.Errorf("invalid sort-by criteria: %q (allowable: %s)", o.Criteria, strings.Join(o.AllowableOptions, ", "))
 	}
+	o.Criteria = normalized
 	return nil
 }

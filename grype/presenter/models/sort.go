@@ -17,6 +17,10 @@ const (
 	SortByKEV           SortStrategy = "kev"
 	SortByVulnerability SortStrategy = "vulnerability"
 
+	// SortByEPSS is an alias for SortByThreat. EPSS results are prioritized by the
+	// exploitation probability score, with the percentile used only as a tie-breaker.
+	SortByEPSS = SortByThreat
+
 	DefaultSortStrategy = SortByRisk
 )
 
@@ -60,7 +64,8 @@ var matchSortStrategy = map[SortStrategy]sortStrategyImpl{
 		compareByVulnerabilityID,
 	},
 	SortByThreat: {
-		// epss and tangential attributes...
+		// epss score, then percentile, and tangential attributes...
+		compareByEPSSScore,
 		compareByEPSSPercentile,
 		compareByRisk,
 		compareBySeverity,
@@ -127,7 +132,8 @@ func SortMatches(matches []Match, strategyName SortStrategy) {
 }
 
 func getSortStrategy(strategyName SortStrategy) sortStrategyImpl {
-	strategy, exists := matchSortStrategy[strategyName]
+	normalizedName := SortStrategy(strings.ToLower(string(strategyName)))
+	strategy, exists := matchSortStrategy[normalizedName]
 	if !exists {
 		log.WithFields("strategy", strategyName).Debugf("unknown sort strategy, falling back to default of %q", DefaultSortStrategy)
 		strategy = matchSortStrategy[DefaultSortStrategy]
@@ -182,6 +188,23 @@ func compareByEPSSPercentile(a, b Match) int {
 
 	switch {
 	case aScore > bScore: // higher severity first
+		return -1
+	case aScore < bScore:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// compareByEPSSScore sorts by the EPSS probability of exploitation (the score),
+// not the percentile. The score is the probability that the vulnerability will be
+// exploited in the wild within the next 30 days.
+func compareByEPSSScore(a, b Match) int {
+	aScore := epssScore(a.Vulnerability.EPSS)
+	bScore := epssScore(b.Vulnerability.EPSS)
+
+	switch {
+	case aScore > bScore: // higher exploitation probability first
 		return -1
 	case aScore < bScore:
 		return 1
@@ -271,6 +294,19 @@ func epssPercentile(es []EPSS) float64 {
 		}
 	}
 	return maxPercentile
+}
+
+func epssScore(es []EPSS) float64 {
+	if len(es) == 0 {
+		return 0.0
+	}
+	maxScore := es[0].EPSS
+	for _, e := range es[1:] {
+		if e.EPSS > maxScore {
+			maxScore = e.EPSS
+		}
+	}
+	return maxScore
 }
 
 // severityPriority maps severity strings to numeric priority for comparison (the lowest value is most severe)

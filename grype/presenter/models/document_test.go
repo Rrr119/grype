@@ -1,10 +1,12 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/anchore/clio"
 	"github.com/anchore/grype/grype/distro"
@@ -96,6 +98,72 @@ func TestPackagesAreSorted(t *testing.T) {
 
 	// sort vulnerabilities second
 	assert.Equal(t, []string{"CVE-1999-0001", "CVE-1999-0003", "CVE-1999-0002"}, actualVulnerabilities)
+}
+
+func TestDocumentSortsByEPSSScoreFor100CVEs(t *testing.T) {
+	const cveCount = 100
+
+	matches := make([]match.Match, 0, cveCount)
+	packages := make([]pkg.Package, 0, cveCount)
+
+	for i := 0; i < cveCount; i++ {
+		scoreRank := (i * 37) % cveCount
+		score := float64(scoreRank) / float64(cveCount)
+		percentile := float64(cveCount-1-scoreRank) / float64(cveCount)
+		id := fmt.Sprintf("CVE-2099-%04d", scoreRank)
+
+		p := pkg.Package{
+			ID:      pkg.ID(fmt.Sprintf("package-%04d", scoreRank)),
+			Name:    "package",
+			Version: "1.0.0",
+			Type:    syftPkg.DebPkg,
+		}
+		packages = append(packages, p)
+
+		matches = append(matches, match.Match{
+			Vulnerability: vulnerability.Vulnerability{
+				Reference: vulnerability.Reference{ID: id},
+				Metadata: &vulnerability.Metadata{
+					ID:       id,
+					Severity: "medium",
+					EPSS: []vulnerability.EPSS{
+						{
+							CVE:        id,
+							EPSS:       score,
+							Percentile: percentile,
+						},
+					},
+				},
+			},
+			Package: p,
+		})
+	}
+
+	doc, err := NewDocument(
+		clio.Identification{},
+		packages,
+		pkg.Context{},
+		match.NewMatches(matches...),
+		nil,
+		nil,
+		nil,
+		nil,
+		SortByEPSS,
+		false,
+		nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, doc.Matches, cveCount)
+
+	for i, result := range doc.Matches {
+		expectedRank := cveCount - 1 - i
+		expectedID := fmt.Sprintf("CVE-2099-%04d", expectedRank)
+		expectedScore := float64(expectedRank) / float64(cveCount)
+
+		assert.Equalf(t, expectedID, result.Vulnerability.ID, "unexpected CVE at sorted position %d", i)
+		require.Lenf(t, result.Vulnerability.EPSS, 1, "EPSS details missing at sorted position %d", i)
+		assert.InDeltaf(t, expectedScore, result.Vulnerability.EPSS[0].EPSS, 1e-12, "unexpected EPSS score at sorted position %d", i)
+	}
 }
 
 func TestFixSuggestedVersion(t *testing.T) {

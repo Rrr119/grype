@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -111,6 +112,116 @@ func TestEPSSPercentile(t *testing.T) {
 	}
 }
 
+func TestEPSSScore(t *testing.T) {
+	tests := []struct {
+		name     string
+		epss     []EPSS
+		expected float64
+	}{
+		{
+			name:     "Empty slice",
+			epss:     []EPSS{},
+			expected: 0.0,
+		},
+		{
+			name: "Single item",
+			epss: []EPSS{
+				{EPSS: 0.75},
+			},
+			expected: 0.75,
+		},
+		{
+			name: "Multiple items, already sorted",
+			epss: []EPSS{
+				{EPSS: 0.95},
+				{EPSS: 0.75},
+				{EPSS: 0.50},
+			},
+			expected: 0.95,
+		},
+		{
+			name: "Multiple items, unsorted",
+			epss: []EPSS{
+				{EPSS: 0.50},
+				{EPSS: 0.95},
+				{EPSS: 0.75},
+			},
+			expected: 0.95,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, epssScore(tt.epss))
+		})
+	}
+}
+
+func TestSortByEPSSScoreFor100CVEs(t *testing.T) {
+	const cveCount = 100
+
+	// Input order is shuffled, and percentile deliberately moves in the opposite
+	// direction from the EPSS score. Sorting must follow the exploitation
+	// probability score, not the percentile or the input order.
+	matches := make([]Match, 0, cveCount)
+	for i := 0; i < cveCount; i++ {
+		scoreRank := (i * 37) % cveCount
+		score := float64(scoreRank) / float64(cveCount)
+		percentile := float64(cveCount-1-scoreRank) / float64(cveCount)
+		id := fmt.Sprintf("CVE-2099-%04d", scoreRank)
+
+		matches = append(matches, Match{
+			Vulnerability: Vulnerability{
+				VulnerabilityMetadata: VulnerabilityMetadata{
+					ID:       id,
+					Severity: "medium",
+					EPSS: []EPSS{
+						{
+							CVE:        id,
+							EPSS:       score,
+							Percentile: percentile,
+						},
+					},
+				},
+			},
+			Artifact: Package{
+				Name:    "package",
+				Version: "1.0.0",
+				Type:    "deb",
+			},
+		})
+	}
+
+	SortMatches(matches, SortByEPSS)
+	require.Len(t, matches, cveCount)
+
+	for i, match := range matches {
+		expectedRank := cveCount - 1 - i
+		expectedID := fmt.Sprintf("CVE-2099-%04d", expectedRank)
+		expectedScore := float64(expectedRank) / float64(cveCount)
+
+		assert.Equalf(t, expectedID, match.Vulnerability.ID, "unexpected CVE at sorted position %d", i)
+		assert.InDeltaf(t, expectedScore, epssScore(match.Vulnerability.EPSS), 1e-12, "unexpected EPSS score at sorted position %d", i)
+
+		if i > 0 {
+			previousScore := epssScore(matches[i-1].Vulnerability.EPSS)
+			assert.GreaterOrEqualf(t, previousScore, epssScore(match.Vulnerability.EPSS), "EPSS scores are not in descending order at position %d", i)
+		}
+	}
+}
+
+func TestSortByEPSSCaseInsensitive(t *testing.T) {
+	expected := createTestMatches()
+	SortMatches(expected, SortByThreat)
+
+	actual := createTestMatches()
+	SortMatches(actual, SortStrategy("EPSS"))
+
+	if diff := cmp.Diff(expected, actual); diff != "" {
+		t.Errorf("EPSS sort should be case insensitive (-want +got):\n%s", diff)
+	}
+}
+
 func TestSeverityPriority(t *testing.T) {
 	tests := []struct {
 		severity string
@@ -147,7 +258,7 @@ func createTestMatches() []Match {
 					ID:       "CVE-2023-1111",
 					Severity: "medium",
 					EPSS: []EPSS{
-						{Percentile: 0.90},
+						{EPSS: 0.90, Percentile: 0.90},
 					},
 					KnownExploited: []KnownExploited{}, // empty KEV
 				},
@@ -166,7 +277,7 @@ func createTestMatches() []Match {
 					ID:       "CVE-2023-2222",
 					Severity: "critical",
 					EPSS: []EPSS{
-						{Percentile: 0.70},
+						{EPSS: 0.70, Percentile: 0.70},
 					},
 					KnownExploited: []KnownExploited{}, // empty KEV
 				},
@@ -185,7 +296,7 @@ func createTestMatches() []Match {
 					ID:       "CVE-2023-3333",
 					Severity: "high",
 					EPSS: []EPSS{
-						{Percentile: 0.30},
+						{EPSS: 0.30, Percentile: 0.30},
 					},
 					KnownExploited: []KnownExploited{
 						{CVE: "CVE-2023-3333", KnownRansomwareCampaignUse: "No"},
@@ -206,7 +317,7 @@ func createTestMatches() []Match {
 					ID:       "CVE-2023-4444",
 					Severity: "low",
 					EPSS: []EPSS{
-						{Percentile: 0.10},
+						{EPSS: 0.10, Percentile: 0.10},
 					},
 					KnownExploited: []KnownExploited{}, // empty KEV
 				},
@@ -225,7 +336,7 @@ func createTestMatches() []Match {
 					ID:       "CVE-2023-5555",
 					Severity: "critical",
 					EPSS: []EPSS{
-						{Percentile: 0.50},
+						{EPSS: 0.50, Percentile: 0.50},
 					},
 					KnownExploited: []KnownExploited{
 						{CVE: "CVE-2023-5555", KnownRansomwareCampaignUse: "Known"},
@@ -264,7 +375,7 @@ func TestAllSortStrategies(t *testing.T) {
 		},
 		{
 			strategy: SortByThreat,
-			expected: []int{0, 1, 4, 2, 3}, // sorted by EPSS percentile: 0.90, 0.70, 0.50, 0.30, 0.10
+			expected: []int{0, 1, 4, 2, 3}, // sorted by EPSS score: 0.90, 0.70, 0.50, 0.30, 0.10
 		},
 		{
 			strategy: SortByRisk,
@@ -337,6 +448,19 @@ func TestIndividualCompareFunctions(t *testing.T) {
 		{
 			name:        "compareByEPSSPercentile",
 			compareFunc: compareByEPSSPercentile,
+			pairs: []struct {
+				a, b     Match
+				expected int
+			}{
+				{m0, m1, -1}, // 0.90 > 0.70
+				{m1, m0, 1},  // 0.70 < 0.90
+				{m1, m4, -1}, // 0.70 > 0.50
+				{m4, m1, 1},  // 0.50 < 0.70
+			},
+		},
+		{
+			name:        "compareByEPSSScore",
+			compareFunc: compareByEPSSScore,
 			pairs: []struct {
 				a, b     Match
 				expected int
